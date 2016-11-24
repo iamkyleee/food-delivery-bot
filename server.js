@@ -1,126 +1,226 @@
-'use strict'
+"use strict";
 
-const express = require('express')
-const Slapp = require('slapp')
-const ConvoStore = require('slapp-convo-beepboop')
-const Context = require('slapp-context-beepboop')
+const Botly = require("botly");
 
-// use `PORT` env var on Beep Boop - default to 3000 locally
-var port = process.env.PORT || 3000
+const pageAccessToken = "EAACdkP5ANe8BAKnjBGAFeM2Ijvb53pbDJjOZCIEkTpu8GaqpJQwBpE4OgdVvzQRT2BRrH86EINDVLiWb60q09uCkVEp6b2KJaBCzQOSQDtLt2COl6dzBe4ITj7Bb9nb14swHcaEVN4ZAdrbreKJ1sn87T4QFMO7GVRq4eY2gZDZD"
+const express = require('express');
+const path = require('path');
+const bodyParser = require('body-parser');
+const http = require('http');
 
-var slapp = Slapp({
-  // Beep Boop sets the SLACK_VERIFY_TOKEN env var
-  verify_token: process.env.SLACK_VERIFY_TOKEN,
-  convo_store: ConvoStore(),
-  context: Context()
-})
+const port = '5000';
 
+const botly = new Botly({
+    verifyToken: "food_bot",
+    accessToken: process.env.ACCESS_TOKEN || pageAccessToken
+});
 
-var HELP_TEXT = `
-I will respond to the following messages:
-\`help\` - to see this message.
-\`hi\` - to demonstrate a conversation that tracks state.
-\`thanks\` - to demonstrate a simple response.
-\`<type-any-other-text>\` - to demonstrate a random emoticon response, some of the time :wink:.
-\`attachment\` - to see a Slack attachment message.
-`
+var app = express();
 
-//*********************************************
-// Setup different handlers for messages
-//*********************************************
+var users = {};
 
-// response to the user typing "help"
-slapp.message('help', ['mention', 'direct_message'], (msg) => {
-  msg.say(HELP_TEXT)
-})
+botly.on('message', (sender, message, data) => {
+    let text = `echo: ${data.text}`;
+    console.log(users)
+    console.log(sender)
 
-// "Conversation" flow that tracks state - kicks off when user says hi, hello or hey
-slapp
-  .message('^(hi|hello|hey)$', ['direct_mention', 'direct_message'], (msg, text) => {
-    msg
-      .say(`${text}, how are you?`)
-      // sends next event from user to this route, passing along state
-      .route('how-are-you', { greeting: text })
-  })
-  .route('how-are-you', (msg, state) => {
-    var text = (msg.body.event && msg.body.event.text) || ''
-
-    // user may not have typed text as their next action, ask again and re-route
-    if (!text) {
-      return msg
-        .say("Whoops, I'm still waiting to hear how you're doing.")
-        .say('How are you?')
-        .route('how-are-you', state)
+    if (users[sender]) {
+        if (data && data.text && data.text.indexOf("image") !== -1) {
+            botly.sendImage({id: sender, url:"https://upload.wikimedia.org/wikipedia/en/9/93/Tanooki_Mario.jpg"}, function (err, whatever) {
+                console.log(err);
+            });
+        }
+        else if (data && data.text &&data.text.indexOf("buttons") !== -1) {
+            let buttons = [];
+            buttons.push(botly.createWebURLButton("Go to Askrround", "http://askrround.com"));
+            buttons.push(botly.createPostbackButton("Continue", "continue"));
+            botly.sendButtons({id: sender, text: "What do you want to do next?", buttons: buttons}, function (err, data) {
+                console.log("send buttons cb:", err, data);
+            });
+        }
+        else if (data && data.text && data.text.indexOf("generic") !== -1) {
+            let buttons = [];
+            buttons.push(botly.createWebURLButton("Go to Askrround", "http://askrround.com"));
+            buttons.push(botly.createPostbackButton("Continue", "continue"));
+            let element = {
+                title: 'What do you want to do next?',
+                item_url: 'https://upload.wikimedia.org/wikipedia/en/9/93/Tanooki_Mario.jpg',
+                image_url: 'https://upload.wikimedia.org/wikipedia/en/9/93/Tanooki_Mario.jpg',
+                subtitle: 'Choose now!',
+                buttons: [botly.createWebURLButton('Go to Askrround', 'http://askrround.com')]
+            };
+            botly.sendGeneric({id: sender, elements:element}, function (err, data) {
+                console.log("send generic cb:", err, data);
+            });
+        }
+        else if (data && data.text && data.text.indexOf("list") !== -1) {
+            let element = botly.createListElement({
+                title: "Classic T-Shirt Collection",
+                image_url: "https://peterssendreceiveapp.ngrok.io/img/collection.png",
+                subtitle: "See all our colors",
+                buttons: [
+                    {title: "DO WORK", payload: "DO_WORK"},
+                ],
+                default_action: {
+                    "url": "https://peterssendreceiveapp.ngrok.io/shop_collection",
+                }
+            });
+            let element2 = botly.createListElement({
+                title: "Number 2",
+                image_url: "https://peterssendreceiveapp.ngrok.io/img/collection.png",
+                subtitle: "See all our colors",
+                buttons: [
+                    {title: "Go to Askrround", url: "http://askrround.com"},
+                ],
+                default_action: {
+                    "url": "https://peterssendreceiveapp.ngrok.io/shop_collection",
+                }
+            });
+            botly.sendList({id: sender, elements: [element, element2], buttons: botly.createPostbackButton("Continue", "continue"), top_element_style: Botly.CONST.TOP_ELEMENT_STYLE.LARGE},function (err, data) {
+                console.log("send list cb:", err, data);
+            });
+        }
+        else if (data && data.text && data.text.indexOf("quick") !== -1) {
+            botly.sendText({id: sender, text:"some question?", quick_replies: [botly.createQuickReply('option1', 'option_1')]}, function (err, data) {
+                console.log("send generic cb:", err, data);
+            });
+        }
+        else if (data && data.text && data.text.indexOf("receipt") !== -1) {
+            let payload = {
+                "recipient_name": "Stephane Crozatier",
+                "order_number": "12345678902",
+                "currency": "USD",
+                "payment_method": "Visa 2345",
+                "order_url": "http://petersapparel.parseapp.com/order?order_id=123456",
+                "timestamp": "1428444852",
+                "elements": [
+                    {
+                        "title": "Classic White T-Shirt",
+                        "subtitle": "100% Soft and Luxurious Cotton",
+                        "quantity": 2,
+                        "price": 50,
+                        "currency": "USD",
+                        "image_url": "http://petersapparel.parseapp.com/img/whiteshirt.png"
+                    },
+                    {
+                        "title": "Classic Gray T-Shirt",
+                        "subtitle": "100% Soft and Luxurious Cotton",
+                        "quantity": 1,
+                        "price": 25,
+                        "currency": "USD",
+                        "image_url": "http://petersapparel.parseapp.com/img/grayshirt.png"
+                    }
+                ],
+                "address": {
+                    "street_1": "1 Hacker Way",
+                    "street_2": "",
+                    "city": "Menlo Park",
+                    "postal_code": "94025",
+                    "state": "CA",
+                    "country": "US"
+                },
+                "summary": {
+                    "subtotal": 75.00,
+                    "shipping_cost": 4.95,
+                    "total_tax": 6.19,
+                    "total_cost": 56.14
+                },
+                "adjustments": [
+                    {
+                        "name": "New Customer Discount",
+                        "amount": 20
+                    },
+                    {
+                        "name": "$10 Off Coupon",
+                        "amount": 10
+                    }
+                ]
+            };
+            botly.sendReceipt({id: sender, payload: payload}, function (err, data) {
+                console.log("send generic cb:", err, data);
+            });
+        }
+        else {
+            botly.send({id: sender, message: {
+                text: `${users[sender].first_name}, try sending 'list'/'generic'/'receipt'/'quick'/'image'/'buttons' to try out the different types of messages`
+            }}, function (err, data) {
+                console.log("regular send cb:", err, data);
+            });
+        }
     }
+    else {
+        botly.getUserProfile(sender, function (err, info) {
+            users[sender] = info;
 
-    // add their response to state
-    state.status = text
-
-    msg
-      .say(`Ok then. What's your favorite color?`)
-      .route('color', state)
-  })
-  .route('color', (msg, state) => {
-    var text = (msg.body.event && msg.body.event.text) || ''
-
-    // user may not have typed text as their next action, ask again and re-route
-    if (!text) {
-      return msg
-        .say("I'm eagerly awaiting to hear your favorite color.")
-        .route('color', state)
+            botly.sendText({id: sender, text: `${text} ${users[sender].first_name}`}, function (err, data) {
+                console.log("send text cb:", err, data);
+            });
+        });
     }
+});
 
-    // add their response to state
-    state.color = text
+botly.on('postback', (sender, message, postback) => {
+    console.log("postback:", sender, message, postback);
+});
 
-    msg
-      .say('Thanks for sharing.')
-      .say(`Here's what you've told me so far: \`\`\`${JSON.stringify(state)}\`\`\``)
-    // At this point, since we don't route anywhere, the "conversation" is over
-  })
+botly.on('delivery', (sender, message, mids) => {
+    console.log("delivery:", sender, message, mids);
+});
 
-// Can use a regex as well
-slapp.message(/^(thanks|thank you)/i, ['mention', 'direct_message'], (msg) => {
-  // You can provide a list of responses, and a random one will be chosen
-  // You can also include slack emoji in your responses
-  msg.say([
-    "You're welcome :smile:",
-    'You bet',
-    ':+1: Of course',
-    'Anytime :sun_with_face: :full_moon_with_face:'
-  ])
-})
+botly.on('optin', (sender, message, optin) => {
+    console.log("optin:", sender, message, optin);
+});
 
-// demonstrate returning an attachment...
-slapp.message('attachment', ['mention', 'direct_message'], (msg) => {
-  msg.say({
-    text: 'Check out this amazing attachment! :confetti_ball: ',
-    attachments: [{
-      text: 'Slapp is a robust open source library that sits on top of the Slack APIs',
-      title: 'Slapp Library - Open Source',
-      image_url: 'https://storage.googleapis.com/beepboophq/_assets/bot-1.22f6fb.png',
-      title_link: 'https://beepboophq.com/',
-      color: '#7CD197'
-    }]
-  })
-})
+botly.on('error', (ex) => {
+    console.log("error:", ex);
+});
 
-// Catch-all for any other responses not handled above
-slapp.message('.*', ['direct_mention', 'direct_message'], (msg) => {
-  // respond only 40% of the time
-  if (Math.random() < 0.4) {
-    msg.say([':wave:', ':pray:', ':raised_hands:'])
-  }
-})
+if (process.env.PAGE_ID) {
+    botly.setGetStarted({pageId: process.env.PAGE_ID, payload: 'GET_STARTED_CLICKED'}, function (err, body) {
+        console.log("welcome cb:", err, body);
+    });
+    botly.setPersistentMenu({pageId: process.env.PAGE_ID, buttons: [botly.createPostbackButton('reset', 'reset_me')]}, function (err, body) {
+        console.log("persistent menu cb:", err, body);
+    })
+}
 
-// attach Slapp to express server
-var server = slapp.attachToExpress(express())
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({extended: false}));
+app.use('/webhook', botly.router());
+app.set('port', port);
 
-// start http server
-server.listen(port, (err) => {
-  if (err) {
-    return console.error(err)
-  }
 
-  console.log(`Listening on port ${port}`)
-})
+// catch 404 and forward to error handler
+app.use(function (req, res, next) {
+    var err = new Error('Not Found');
+    err.status = 404;
+    next(err);
+});
+
+// error handlers
+
+// development error handler
+// will print stacktrace
+if (app.get('env') === 'development') {
+    app.use(function (err, req, res, next) {
+        res.status(err.status || 500);
+        res.json({
+            message: err.message,
+            error: {}
+        });
+    });
+}
+
+// production error handler
+// no stacktraces leaked to user
+app.use(function (err, req, res, next) {
+    res.status(err.status || 500);
+    res.json({
+        message: err.message,
+        error: {}
+    });
+});
+
+const server = http.createServer(app);
+
+server.listen(port);
